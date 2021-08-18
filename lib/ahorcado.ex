@@ -1,84 +1,87 @@
 defmodule Ahorcado do
 
-  def open_document(name) do
-   {_,contents} = File.read(name)
-   contents
+  def comenzar_juego() do
+    IO.gets("Escribe el nombre del archivo con su terminacion \n")|> String.split("\n", trim: true)|> abrir_documento()|> obtener_palabras()|> control_palabras()
   end
 
-  def get_words(content) do
-    content |> String.split("\r\n", trim: true)
+
+  def control_palabras(palabras) when palabras |> length() > 0 do
+    palabras|>hd()|>comenzar_intento("",5)
+    control_palabras(palabras|>tl())
+  end
+  def control_palabras(_) do
+    IO.puts("GANASTE FIN DEL JUEGO :D")
+    :fin
   end
 
-  def validate_char_in_word(word_in_list,letter) do
-    unless length(word_in_list)< 1 do
-      if word_in_list|>hd()|>to_string() == letter|>to_string() do
-        IO.puts("\n***ACERTASTE UNA LETRA***\n")
-        letter
-      else
-        word_in_list|>tl()|>validate_char_in_word(letter)
+
+  def comenzar_intento(palabra_actual,mi_respuesta,intentos_restantes) when intentos_restantes > 0  do
+    unless (palabra_oculta=palabra_actual|>separar_a_char()|>esconder_string("")|>comparar_respuesta(mi_respuesta)|>remplazar_palabras(palabra_actual)) == :ok do
+      case IO.gets("\n\n***Te quedan:  #{intentos_restantes} intento(s)*** \n----Intenta adivinar la siguiente palabra----- \n#{palabra_oculta}\nEscribe un caracter\n")|> String.split("\n", trim: true) |>to_string()|>validar_respuesta(palabra_actual) do
+        :fail -> comenzar_intento(palabra_actual,mi_respuesta,intentos_restantes-1)
+        letra_correcta ->comenzar_intento(palabra_actual,(mi_respuesta<>letra_correcta),intentos_restantes)
       end
     end
   end
 
-  def word_control(words) do
-    if words |> length() > 0 do
-      if hd(words)|>try_word("$",5) == :vencido do
-        words|>tl()|>word_control()
-      end
-    else
-      IO.puts("****GANASTE****")
-      :FinDelJuego
-    end
+  def comenzar_intento(_,_,intentos_restantes) when intentos_restantes == 0 do
+    IO.puts("PERDISTE T.T")
+    Process.exit(self(), :normal)
   end
 
-  def hide_chars(word_to_hide,chars_hidden) do
-    if length(word_to_hide|>separate_char()) >1 do
-      hc=word_to_hide|>separate_char()|>tl()|>hd
-      word_to_hide|>separate_char()|>tl()|>tl()|>to_string()|>hide_chars(chars_hidden<>hc)
-    else
-      chars_hidden<>word_to_hide
-    end
-  end
 
-  def replace_word(aList,aString,currentAnswer) do
-   newList= aList|>to_string()|>String.replace(currentAnswer|>separate_char(),"")|>separate_char()
-   if newList|>length() >0 do
-    aString |>String.replace(newList,"?")
-   else
+  def remplazar_palabras(letras_a_ocultar,palabra_a_ocultar) when byte_size(letras_a_ocultar) > 0  do
+    palabra_a_ocultar |>String.replace((letras_a_ocultar|>separar_a_char()),"?")
+  end
+  def remplazar_palabras(_,_)  do
     IO.puts("\n\n\n***PALABRA CORRECTA >:)***\n\n\n")
     :ok
-   end
   end
 
-  def try_word(current_word,my_word,chance_no) do
-    if chance_no>0 do
-      hidden_word=current_word|>hide_chars("")|>separate_char()|>replace_word(current_word,my_word)
-      if hidden_word != :ok do
-        IO.puts("\n\n***Te quedan:  #{chance_no} intento(s)*** \n----Intenta adivinar la siguiente palabra----- \n#{hidden_word}")
-        current_char=IO.gets("Escribe un caracter\n")|> String.split("\n", trim: true)
-        answer = current_word |> separate_char()|>validate_char_in_word(current_char)
-        if answer == nil do
-          IO.puts("***FALLASTE D:***\n\n")
-          try_word(current_word,my_word,chance_no-1)
-        else
-          current_answer=answer|>hd()|>to_string()
-          try_word(current_word,my_word<>current_answer,chance_no)
-          answer
-        end
-      end
+
+  def validar_respuesta(letra,palabra_actual_) when byte_size(palabra_actual_)>0  do
+    if(String.contains?(palabra_actual_,letra)) do
+      IO.puts("\n***ACERTASTE UNA LETRA***\n")
+      letra
     else
-      IO.puts("\n\n\nYa perdiste T_T\n\n\n")
-      Process.exit(self(), :normal)
+      IO.puts("\n***FALLASTE :(***\n")
+      :fail
     end
-    :vencido
   end
 
-  def separate_char(aString) do
-   String.codepoints(aString)
+
+  def comparar_respuesta(letras_ocultas,respuesta_actual) when byte_size(respuesta_actual)>0 do
+   letras_ocultas|>to_string()|>String.replace(respuesta_actual|>separar_a_char(),"")
+  end
+  def comparar_respuesta(letras_ocultas,_) do
+    letras_ocultas
   end
 
-  def start_game() do
-   IO.gets("Escribe el nombre del archivo con su terminacion \n")|> String.split("\n", trim: true)|> open_document() |>get_words() |> word_control()
+
+  def esconder_string(lista_a_esconder,char_escondidos) when  lista_a_esconder|> length() > 1 do
+    lista_a_esconder|>tl()|>tl()
+    |>esconder_string(char_escondidos<>(lista_a_esconder|>tl()|>hd()))
+  end
+  def esconder_string(_,char_escondidos) do
+    char_escondidos
+  end
+
+
+  def obtener_palabras({:ok,contenido})  do
+    contenido |> String.split("\r\n", trim: true)
+  end
+  def obtener_palabras({:error,_}) do
+    IO.puts("El documento esta vacio o no existe")
+    Process.exit(self(), :normal)
+  end
+
+
+  def separar_a_char(palabra_en_cadena) do
+    String.codepoints(palabra_en_cadena)
+  end
+
+  def abrir_documento(nombre_archivo) do
+    File.read(nombre_archivo)
   end
 
 end
